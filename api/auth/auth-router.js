@@ -1,7 +1,15 @@
 const router = require('express').Router();
+const Users = require('../users/user-model');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const validateCred = require('../middleware/validateCred');
+const uniqueName = require('../middleware/uniqueName');
+const invalidCred = require('../middleware/invalidCred');
+const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret';
 
-router.post('/register', (req, res) => {
-  res.end('implement register, please!');
+require('dotenv').config();
+
+router.post('/register', validateCred, uniqueName, async (req, res) => {
   /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
@@ -27,11 +35,22 @@ router.post('/register', (req, res) => {
     4- On FAILED registration due to the `username` being taken,
       the response body should include a string exactly as follows: "username taken".
   */
+    const {username, password} = req.body;
+
+    // const existingUser = await Users.findBy({username}).first();
+    // if(existingUser){
+    //     res.status(401).json({message: "username taken"})
+    // } else {
+        const hash = bcrypt.hashSync(password, 8);
+        const user = await Users.add({username, password: hash});
+        res.status(201).json(user);
+    //}
+
+
 });
 
-router.post('/login', (req, res) => {
-  res.end('implement login, please!');
-  /*
+router.post('/login', validateCred, invalidCred, async (req, res) => {
+    /*
     IMPLEMENT
     You are welcome to build additional middlewares to help with the endpoint's functionality.
 
@@ -54,6 +73,37 @@ router.post('/login', (req, res) => {
     4- On FAILED login due to `username` not existing in the db, or `password` being incorrect,
       the response body should include a string exactly as follows: "invalid credentials".
   */
+      const { username } = req.body;
+
+      try {
+        // Find user by username
+        const user = await Users.findBy({ username }).first();
+
+        // Generate JWT token
+        const token = generateToken(user);
+
+        // Return success message and token
+        res.status(200).json({
+          message: `Welcome, ${user.username}`,
+          token
+        });
+      } catch (error) {
+        console.error("Error occurred during login:", error);
+        res.status(500).json({ message: "Server error while logging in" });
+      }
+
+
 });
+
+function generateToken(user) {
+  const payload = {
+    subject: user.id,
+    username: user.username,
+  };
+  const options = {
+    expiresIn: '1d',
+  };
+  return jwt.sign(payload, jwtSecret, options);
+}
 
 module.exports = router;
